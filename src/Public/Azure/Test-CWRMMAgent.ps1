@@ -1,9 +1,25 @@
 <#
 .NOTES
 	Author:			Chris Stone <chris.stone@nuwavepartners.com>
-	Date-Modified:	2025-06-24 14:19:35
+	Date-Modified:	2025-06-24 15:43:30
 
+ .SYNOPSIS
+    Tests the status and service of the ConnectWise RMM Agent.
+
+ .DESCRIPTION
+    This script performs checks to verify the operational status of the ConnectWise RMM Agent.
+    It checks if the agent's status is healthy and if the "ITSPlatform" service is running.
+
+ .PARAMETER SkipServiceCheck
+    If specified, the script will skip the check for the "ITSPlatform" service.
+ .PARAMETER SkipStatusCheck
+    If specified, the script will skip the general status check of the agent.
 #>
+
+param(
+	[switch] $SkipServiceCheck,
+	[switch] $SkipStatusCheck
+)
 
 ###################################################################### FUNCTIONS
 
@@ -11,29 +27,26 @@
 
 #################################################################### MAIN SCRIPT
 
-# Step 1: Check and Start the Service
-$AgentService = "ITSPlatform"
-Write-Output "Checking Service..."
-if ((Get-Service $AgentService -ErrorAction SilentlyContinue)) {
-	if ((Get-Service $AgentService).Status -ne "Running") {
-		Write-Output "$AgentService service is not running. Attempting to start it..."
-		try {
-			$r = Start-Service -Name $AgentService -PassThru
-			If ($r.Status -eq "Running") {
-				Write-Output "$AgentService service started."
-				Start-Sleep 3
-				exit 0
-			}
-		} catch {
-			Write-Error "Failed to start the $AgentService service: $_"
-			exit 2
-		}
-	} else {
-		Write-Output "$AgentService is running"
-		Start-Sleep 3
-		exit 0
+
+Start-Transcript -Path (Join-Path -Path $env:TEMP -ChildPath ("NuWave_{0}.log" -f (Get-Date -Format "yyyy-MM-dd_HH-mm-ss")))
+Write-Output ('Script Started ').PadRight(80, '-')
+
+[int]$ExitResult = 0
+
+if (!$PSBoundParameters.ContainsKey('SkipStatusCheck')) {
+	if (!(Invoke-StatusCheck)) {
+		Write-Output 'Status Check Failed'
+		$ExitResult++
 	}
-} else {
-	Write-Output "Service Not Found."
-	exit 1
 }
+
+if (!$PSBoundParameters.ContainsKey('SkipServiceCheck')) {
+	if (!(Invoke-ServiceCheck -Service 'ITSPlatform')) {
+		Write-Output 'ITSPlatform Service Not Running'
+		$ExitResult++
+	}
+}
+
+Write-Output ('Script Finished ').PadRight(80, '-')
+Stop-Transcript
+Exit $ExitResult

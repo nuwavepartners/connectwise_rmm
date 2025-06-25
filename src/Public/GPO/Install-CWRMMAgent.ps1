@@ -1,7 +1,7 @@
 <#
 .NOTES
     Author:         Chris Stone <chris.stone@nuwavepartners.com>
-    Date-Modified:  2025-06-24 14:19:38
+    Date-Modified:  2025-06-25 12:18:04
 
 .SYNOPSIS
     Installs an Agent MSI after verifying prerequisites.
@@ -42,9 +42,10 @@ param(
 
 #################################################################### MAIN SCRIPT
 
-Start-Transcript -Path (Join-Path $env:TEMP ("NuWave_{0}.log" -f (Get-Date -Format "yyyy-MM-dd_HH-mm-ss")))
+Start-Transcript -Path (Join-Path -Path $env:TEMP -ChildPath ("NuWave_{0}.log" -f (Get-Date -Format "yyyy-MM-dd_HH-mm-ss")))
 Write-Output ('Script Started ').PadRight(80, '-')
 
+# Checks
 if (!$PSBoundParameters.ContainsKey('SkipStatusCheck')) {
 	if (Invoke-StatusCheck) {
 		Write-Output 'Status Check Working'
@@ -63,10 +64,10 @@ if (!$PSBoundParameters.ContainsKey('SkipServiceCheck')) {
 	}
 }
 
+# Install
 Invoke-EnvironmentCheck
 
-$MSIPath = "$env:TEMP\agent.msi"
-if (Test-Path -Path $MSIPath) { Remove-Item -Path $MSIPath -Force }
+$MSIPath = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ([System.IO.Path]::GetRandomFileName() + ".msi")
 Invoke-WebRequest -Uri $AgentUri -OutFile $MSIPath
 Install-AgentMsi -MSIPath $MSIPath -Token $Token
 Remove-Item -Path $MSIPath

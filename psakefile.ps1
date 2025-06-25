@@ -1,7 +1,7 @@
 Properties {
 	$ProjectRoot = Get-Location
-	$InputDir = '.\src'
-	$OutputDir = '.\build'
+	$InputDir = Join-Path $ProjectRoot 'src'
+	$OutputDir = Join-Path $ProjectRoot 'build'
 }
 
 TaskSetup {
@@ -55,6 +55,21 @@ Task Test -depends Init {
 }
 
 Task Build -depends Test {
+
+	# Check Signing Authentication
+	if ([string]::IsNullOrEmpty($env:AZURE_TENANT_ID)) { Throw ('{0} must be defined' -f $_) }
+	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_ID)) { Throw ('{0} must be defined' -f $_) }
+	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_SECRET)) { Throw ('{0} must be defined' -f $_) }
+
+	# Signing Configuration
+	$SignCfg = ".\sign.json"
+	@{
+		"Endpoint"               = "https://eus.codesigning.azure.net/"
+		"CodeSigningAccountName" = "nw-devops-trustedsigning"
+		"CertificateProfileName" = "NuWave-DevOps-Production"
+		"CorrelationId"          = (("NTP", ((Get-Location).Path.Split('\')[-1]), (Get-Date -Format 'yyyyMMdd')) -join '-')
+	} | ConvertTo-Json | Out-File $SignCfg
+
 	# Process Private Scripts
 	$privateFunctions = @{}
 	Get-ChildItem -Path "$ProjectRoot\src\Private" -Filter "*.ps1" -Recurse | ForEach-Object {
@@ -71,7 +86,7 @@ Task Build -depends Test {
 	$InputBase = Get-Item -Path (Join-Path $InputDir 'Public')
 	Get-ChildItem -Path "$ProjectRoot\src\Public" -Filter "*.ps1" -Recurse | ForEach-Object {
 		# Build Destination Path, Copy
-		$destinationDir = Join-Path $ProjectRoot "build" (Resolve-Path -Path $_.FullName -Relative -RelativeBasePath $InputBase | Split-Path)
+		$destinationDir = Join-Path -Path $ProjectRoot -ChildPath "build" -AdditionalChildPath (Resolve-Path -Path $_.FullName -Relative -RelativeBasePath $InputBase | Split-Path)
 		If (!(Test-Path -Path $destinationDir -PathType Container)) {
 			New-Item -ItemType Directory -Path $destinationDir | Out-Null
 		}
@@ -112,11 +127,26 @@ Task Build -depends Test {
 				throw ('Missing Function: {0}' -f $functionName)
 			}
 		}
+		# TODO Doesn't consider Imported Modules
+		# TODO Doesn't check imported functions dependencies
 
-		$updatedScriptContent = $scriptContent -replace '#FUNCTIONS#', $functionsContent
+		$updatedScriptContent = $scriptContent
+		$functionsPlaceholder = '#FUNCTIONS#'
+		$indexOfPlaceholder = $updatedScriptContent.IndexOf($functionsPlaceholder)
+		if ($indexOfPlaceholder -ge 0) {
+			$updatedScriptContent = $updatedScriptContent.Remove($indexOfPlaceholder, $functionsPlaceholder.Length).Insert($indexOfPlaceholder, $functionsContent)
+		}
+
 		Set-Content -Path $newItem.FullName -Value $updatedScriptContent
+
+		#Sign it!
+		C:\temp\Microsoft.Windows.SDK.BuildTools\bin\10.0.22621.0\x64\signtool.exe sign /v /debug /fd SHA256 /tr "http://timestamp.acs.microsoft.com" /td SHA256 /dlib "C:\temp\Microsoft.Trusted.Signing.Client\bin\x64\Azure.CodeSigning.Dlib.dll" /dmdf $SignCfg $newItem.FullName
 	}
 
+	# Export Certs
+	$S = Get-AuthenticodeSignature -FilePath (Get-ChildItem -Path $OutputDir -Filter '*.ps1' -Recurse | Select-Object -First 1).FullName
+	$S.SignerCertificate.ExportCertificatePem() | Out-File -FilePath (Join-Path $OutputDir ($S.SignerCertificate.Thumbprint + '.crt'))
+	Export-Certificate -Cert $s.SignerCertificate -FilePath (Join-Path $OutputDir ($s.SignerCertificate.Thumbprint + '.cer')) -Type CERT
 
 }
 
@@ -126,9 +156,5 @@ Task Publish -depends Build {
 		NuGetApiKey = $env:NuGetApiKey
 	}
 
-	if ($Repository) {
-		$publishParams['Repository'] = $Repository
-	}
-
-	Publish-Module @publishParams
+	Publish-Script @publishParams
 }
