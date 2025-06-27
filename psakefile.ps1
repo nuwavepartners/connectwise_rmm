@@ -16,6 +16,11 @@ Task Init {
 	# "Build System Details:"
 	# Get-Item ENV:BH*
 
+	# Check Signing Authentication
+	if ([string]::IsNullOrEmpty($env:AZURE_TENANT_ID)) { Throw ('{0} must be defined' -f $_) }
+	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_ID)) { Throw ('{0} must be defined' -f $_) }
+	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_SECRET)) { Throw ('{0} must be defined' -f $_) }
+
 	# Create Output Directory
 	if (Test-Path -Path $OutputDir) { Remove-Item -Path $OutputDir -Force -Recurse }
 	New-Item -Path $OutputDir -ItemType Directory | Out-Null
@@ -55,11 +60,16 @@ Task Test -depends Init {
 }
 
 Task Build -depends Test {
-
-	# Check Signing Authentication
-	if ([string]::IsNullOrEmpty($env:AZURE_TENANT_ID)) { Throw ('{0} must be defined' -f $_) }
-	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_ID)) { Throw ('{0} must be defined' -f $_) }
-	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_SECRET)) { Throw ('{0} must be defined' -f $_) }
+	# Copy ADMx Files
+	$InputBase = Get-Item -Path (Join-Path $InputDir 'Public')
+	Get-ChildItem -Path "$ProjectRoot\src\Public" -Filter "*.adm?" -Recurse | ForEach-Object {
+		# Build Destination Path, Copy
+		$destinationDir = Join-Path -Path $ProjectRoot -ChildPath "build" -AdditionalChildPath (Resolve-Path -Path $_.FullName -Relative -RelativeBasePath $InputBase | Split-Path)
+		If (!(Test-Path -Path $destinationDir -PathType Container)) {
+			New-Item -ItemType Directory -Path $destinationDir | Out-Null
+		}
+		Copy-Item -Path $_.FullName -Destination $destinationDir
+	}
 
 	# Signing Configuration
 	$SignCfg = ".\sign.json"
@@ -148,6 +158,8 @@ Task Build -depends Test {
 	$S.SignerCertificate.ExportCertificatePem() | Out-File -FilePath (Join-Path $OutputDir ($S.SignerCertificate.Thumbprint + '.crt'))
 	Export-Certificate -Cert $s.SignerCertificate -FilePath (Join-Path $OutputDir ($s.SignerCertificate.Thumbprint + '.cer')) -Type CERT
 
+	# Zip for Release
+	Compress-Archive -Path $OutputDir -DestinationPath (Join-Path $OutputDir 'NuWaveCWRMMAgent.zip')
 }
 
 Task Publish -depends Build {

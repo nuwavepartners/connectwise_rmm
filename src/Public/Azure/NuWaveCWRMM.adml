@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0"
+	schemaVersion="1.0" xmlns="http://www.microsoft.com/GroupPolicy/PolicyDefinitions">
+	<displayName>NuWave Technology Partners</displayName>
+	<description>Administrative Template for NuWave Technology Partners Agents</description>
+	<resources>
+		<stringTable>
+			<string id="CAT">NuWave Technology Partners</string>
+			<string id="CATHELP">NuWave Configurations</string>
+			<string id="Sample_Textbox">CW RMM Token</string>
+			<string id="Sample_Textbox_Help">Example Help Text</string>
+			<string id="SUPPORTED_WindowsVista">At least Microsoft Windows Vista or Windows Server
+				2003 family</string>
+		</stringTable>
+		<presentationTable>
+			<presentation id="Sample_Textbox">
+				<textBox refId="Sample_TextboxPrompt">
+					<label>Prompt label for textbox</label>
+				</textBox>
+			</presentation>
+		</presentationTable>
+	</resources>
+</policyDefinitionResources>

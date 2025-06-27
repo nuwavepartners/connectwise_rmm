@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0"
+	xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+	<policyNamespaces>
+		<target prefix="NuWave" namespace="NuWave.Policies" />
+	</policyNamespaces>
+	<supportedOn>
+		<definitions>
+			<definition name="SUPPORTED_WindowsVista" displayName="$(string.SUPPORTED_WindowsVista)" />
+		</definitions>
+	</supportedOn>
+	<resources minRequiredRevision="1.0" />
+	<categories>
+		<category name="CatNuWave" displayName="$(string.CAT)" explainText="$(string.CATHELP)" />
+	</categories>
+	<policies>
+		<policy name="Sample_Textbox" class="Both" displayName="$(string.Sample_Textbox)"
+			explainText="$(string.Sample_Textbox_Help)"
+			presentation="$(presentation.Sample_Textbox)" key="Software\Policies\NuWave">
+			<parentCategory ref="CatNuWave" />
+			<supportedOn ref="SUPPORTED_WindowsVista" />
+			<elements>
+				<text id="Sample_TextboxPrompt" valueName="CWRMMToken" />
+			</elements>
+		</policy>
+	</policies>
+</policyDefinitions>

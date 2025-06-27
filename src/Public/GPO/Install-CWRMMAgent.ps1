@@ -1,7 +1,7 @@
 <#
 .NOTES
     Author:         Chris Stone <chris.stone@nuwavepartners.com>
-    Date-Modified:  2025-06-25 12:18:04
+    Date-Modified:  2025-06-27 12:11:15
 
 .SYNOPSIS
     Installs an Agent MSI after verifying prerequisites.
@@ -33,7 +33,8 @@ param(
 	[string] $AgentUri = 'https://prod.setup.itsupport247.net/windows/BareboneAgent/32/X/MSI/setup',
 
 	[switch] $SkipServiceCheck,
-	[switch] $SkipStatusCheck
+	[switch] $SkipStatusCheck,
+	[switch] $SkipAgentInstall
 )
 
 ###################################################################### FUNCTIONS
@@ -45,32 +46,48 @@ param(
 Start-Transcript -Path (Join-Path -Path $env:TEMP -ChildPath ("NuWave_{0}.log" -f (Get-Date -Format "yyyy-MM-dd_HH-mm-ss")))
 Write-Output ('Script Started ').PadRight(80, '-')
 
+$AlreadyInstalled = 0
+
 # Checks
 if (!$PSBoundParameters.ContainsKey('SkipStatusCheck')) {
 	if (Invoke-StatusCheck) {
 		Write-Output 'Status Check Working'
-		Write-Output ('Script Finished ').PadRight(80, '-')
-		Stop-Transcript
-		Exit 0
+		$AlreadyInstalled++
 	}
 }
 
 if (!$PSBoundParameters.ContainsKey('SkipServiceCheck')) {
 	if (Invoke-ServiceCheck -Service 'ITSPlatform') {
 		Write-Output 'ITSPlatform Service Running Already'
-		Write-Output ('Script Finished ').PadRight(80, '-')
-		Stop-Transcript
-		Exit 0
+		$AlreadyInstalled++
 	}
 }
 
 # Install
-Invoke-EnvironmentCheck
+if (!$PSBoundParameters.ContainsKey('SkipAgentInstall') -and ($AlreadyInstalled -le 0)) {
+	# Check Environment
+	Write-Verbose "Checking TLS Protocols"
+	[Net.ServicePointManager]::SecurityProtocol = [System.Enum]::GetValues([System.Net.SecurityProtocolType]) | Where-Object { $_ -match 'Tls' };
 
-$MSIPath = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ([System.IO.Path]::GetRandomFileName() + ".msi")
-Invoke-WebRequest -Uri $AgentUri -OutFile $MSIPath
-Install-AgentMsi -MSIPath $MSIPath -Token $Token
-Remove-Item -Path $MSIPath
+	Write-Verbose "Checking Execution Policy"
+	if (@('Unrestricted', 'RemoteSigned', 'Bypass') -notcontains (Get-ExecutionPolicy -Scope Process)) {
+		Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process -Force -ErrorAction SilentlyContinue
+	}
+
+	# Download
+	$MSIPath = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath ([System.IO.Path]::GetRandomFileName() + ".msi")
+	Write-Verbose "Downloading {0} {1}" -f $AgentUri, $MSIPath
+	Invoke-WebRequest -Uri $AgentUri -OutFile $MSIPath
+
+	# Install
+	Write-Verbose "Installing $MSIPath"
+	$Installer = New-Object -ComObject WindowsInstaller.Installer
+	$Installer.GetType().InvokeMember('UILevel', [System.Reflection.BindingFlags]::SetProperty, $null, $Installer, 2)
+	$Session = $Installer.GetType().InvokeMember('OpenPackage', [System.Reflection.BindingFlags]::InvokeMethod, $null, $Installer, $MSIPath)
+	$Session.GetType().InvokeMember('Property', [System.Reflection.BindingFlags]::SetProperty, $null, $Session, @('TOKEN', $Token))
+	$Session.GetType().InvokeMember('DoAction', [System.Reflection.BindingFlags]::InvokeMethod, $null, $Session, 'INSTALL')
+	Remove-Item -Path $MSIPath
+}
 
 Write-Output ('Script Finished ').PadRight(80, '-')
 Stop-Transcript
