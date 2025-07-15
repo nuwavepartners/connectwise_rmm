@@ -1,7 +1,7 @@
 <#
 .NOTES
 	Author:			Chris Stone <chris.stone@nuwavepartners.com>
-	Date-Modified:	2025-06-24 15:43:30
+	Date-Modified:	2025-06-27 16:51:02
 
  .SYNOPSIS
     Tests the status and service of the ConnectWise RMM Agent.

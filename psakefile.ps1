@@ -8,7 +8,7 @@ TaskSetup {
 	Write-Output "".PadRight(70, '-')
 }
 
-Task Default -depends Test
+Task Default -depends Build
 
 Task Init {
 	# Set-Location $ProjectRoot
@@ -157,6 +157,8 @@ Task Build -depends Test {
 	$S = Get-AuthenticodeSignature -FilePath (Get-ChildItem -Path $OutputDir -Filter '*.ps1' -Recurse | Select-Object -First 1).FullName
 	$S.SignerCertificate.ExportCertificatePem() | Out-File -FilePath (Join-Path $OutputDir ($S.SignerCertificate.Thumbprint + '.crt'))
 	Export-Certificate -Cert $s.SignerCertificate -FilePath (Join-Path $OutputDir ($s.SignerCertificate.Thumbprint + '.cer')) -Type CERT
+
+	Remove-Item $SignCfg
 
 	# Zip for Release
 	Compress-Archive -Path $OutputDir -DestinationPath (Join-Path $OutputDir 'NuWaveCWRMMAgent.zip')
