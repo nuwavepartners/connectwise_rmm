@@ -2,24 +2,26 @@ Properties {
 	$ProjectRoot = Get-Location
 	$InputDir = Join-Path $ProjectRoot 'src'
 	$OutputDir = Join-Path $ProjectRoot 'build'
+	$Version = $env:GITHUB_REF_NAME
+
+	if ($null -ne $Env:GITHUB_REPOSITORY) {
+		$ProjName = $Env:GITHUB_REPOSITORY -replace '[^a-zA-Z0-9]', '_'
+	} else {
+		$ProjName = ($ProjectRoot.Path.Split([System.IO.Path]::DirectorySeparatorChar)[-1])
+	}
 }
 
 TaskSetup {
 	Write-Output "".PadRight(70, '-')
 }
 
-Task Default -depends Build
+Task Default -depends Test
 
 Task Init {
-	# Set-Location $ProjectRoot
-	# Set-BuildEnvironment
-	# "Build System Details:"
-	# Get-Item ENV:BH*
-
 	# Check Signing Authentication
-	if ([string]::IsNullOrEmpty($env:AZURE_TENANT_ID)) { Throw ('{0} must be defined' -f $_) }
-	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_ID)) { Throw ('{0} must be defined' -f $_) }
-	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_SECRET)) { Throw ('{0} must be defined' -f $_) }
+	if ([string]::IsNullOrEmpty($env:AZURE_TENANT_ID)) { throw ('{0} must be defined' -f $_) }
+	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_ID)) { throw ('{0} must be defined' -f $_) }
+	if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_SECRET)) { throw ('{0} must be defined' -f $_) }
 
 	# Create Output Directory
 	if (Test-Path -Path $OutputDir) { Remove-Item -Path $OutputDir -Force -Recurse }
@@ -43,7 +45,7 @@ Task Test -depends Init {
 			}
 		}
 		$TestResults = Invoke-Pester -Configuration $PesterConf
-		If ($TestResults.FailedCount -gt 0) {
+		if ($TestResults.FailedCount -gt 0) {
 			Write-Error "Failed '$($TestResults.FailedCount)' tests, build failed" -ErrorAction Stop
 		}
 	}
@@ -65,7 +67,7 @@ Task Build -depends Test {
 	Get-ChildItem -Path "$ProjectRoot\src\Public" -Filter "*.adm?" -Recurse | ForEach-Object {
 		# Build Destination Path, Copy
 		$destinationDir = Join-Path -Path $ProjectRoot -ChildPath "build" -AdditionalChildPath (Resolve-Path -Path $_.FullName -Relative -RelativeBasePath $InputBase | Split-Path)
-		If (!(Test-Path -Path $destinationDir -PathType Container)) {
+		if (!(Test-Path -Path $destinationDir -PathType Container)) {
 			New-Item -ItemType Directory -Path $destinationDir | Out-Null
 		}
 		Copy-Item -Path $_.FullName -Destination $destinationDir
@@ -77,7 +79,7 @@ Task Build -depends Test {
 		"Endpoint"               = "https://eus.codesigning.azure.net/"
 		"CodeSigningAccountName" = "nw-devops-trustedsigning"
 		"CertificateProfileName" = "NuWave-DevOps-Production"
-		"CorrelationId"          = (("NTP", ((Get-Location).Path.Split('\')[-1]), (Get-Date -Format 'yyyyMMdd')) -join '-')
+		"CorrelationId"          = (("NTP", $ProjName, (Get-Date -Format 'yyyyMMdd')) -join '-')
 	} | ConvertTo-Json | Out-File $SignCfg
 
 	# Process Private Scripts
@@ -97,7 +99,7 @@ Task Build -depends Test {
 	Get-ChildItem -Path "$ProjectRoot\src\Public" -Filter "*.ps1" -Recurse | ForEach-Object {
 		# Build Destination Path, Copy
 		$destinationDir = Join-Path -Path $ProjectRoot -ChildPath "build" -AdditionalChildPath (Resolve-Path -Path $_.FullName -Relative -RelativeBasePath $InputBase | Split-Path)
-		If (!(Test-Path -Path $destinationDir -PathType Container)) {
+		if (!(Test-Path -Path $destinationDir -PathType Container)) {
 			New-Item -ItemType Directory -Path $destinationDir | Out-Null
 		}
 		$newItem = Copy-Item -Path $_.FullName -Destination $destinationDir -PassThru
@@ -154,21 +156,13 @@ Task Build -depends Test {
 	}
 
 	# Export Certs
-	$S = Get-AuthenticodeSignature -FilePath (Get-ChildItem -Path $OutputDir -Filter '*.ps1' -Recurse | Select-Object -First 1).FullName
-	$S.SignerCertificate.ExportCertificatePem() | Out-File -FilePath (Join-Path $OutputDir ($S.SignerCertificate.Thumbprint + '.crt'))
-	Export-Certificate -Cert $s.SignerCertificate -FilePath (Join-Path $OutputDir ($s.SignerCertificate.Thumbprint + '.cer')) -Type CERT
-
-	Remove-Item $SignCfg
+	$SigningCert = Get-AuthenticodeSignature -FilePath (Get-ChildItem -Path $OutputDir -Filter '*.ps1' -Recurse | Select-Object -First 1).FullName
+	$SigningCert.SignerCertificate.ExportCertificatePem() | Out-File -FilePath (Join-Path $OutputDir ($SigningCert.SignerCertificate.Thumbprint + '.crt'))
 
 	# Zip for Release
-	Compress-Archive -Path $OutputDir -DestinationPath (Join-Path $OutputDir 'NuWaveCWRMMAgent.zip')
-}
-
-Task Publish -depends Build {
-	$publishParams = @{
-		Path        = $env:BHPSModulePath
-		NuGetApiKey = $env:NuGetApiKey
+	if ($Version) {
+		Compress-Archive -Path $OutputDir\* -DestinationPath (Join-Path $OutputDir "NuWaveCWRMMAgent-$Version.zip")
+	} else {
+		Compress-Archive -Path $OutputDir\* -DestinationPath (Join-Path $OutputDir 'NuWaveCWRMMAgent.zip')
 	}
-
-	Publish-Script @publishParams
 }
