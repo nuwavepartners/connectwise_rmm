@@ -8,24 +8,30 @@ on:
 name: Create Build & Release
 
 jobs:
-  Publish:
-    name: PSAke Publish Task
+  build-and-release:
+    name: Build and Release
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install Dependencies from PSGallery
+      - name: Install PowerShell Dependencies
         shell: pwsh
         run: |
             Set-PSRepository PSGallery -InstallationPolicy Trusted
             Install-Module Psake
 
-      - name: Invoke PSAke
+      - name: Build Project using PSAke
         shell: pwsh
         run: Invoke-psake -taskList 'Build'
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
 
-      - name: Create Release
+      - name: Create GitHub Release and Upload Artifact
         uses: ncipollo/release-action@v1
         with:
           artifacts: 'build/NuWaveCWRMMAgent-${{ github.ref_name }}.zip'
